@@ -6,6 +6,7 @@ import org.springframework.ai.reader.pdf.PagePdfDocumentReader;
 import org.springframework.ai.reader.pdf.config.PdfDocumentReaderConfig;
 import org.springframework.ai.reader.tika.TikaDocumentReader;
 import org.springframework.ai.transformer.splitter.TokenTextSplitter;
+import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
@@ -56,7 +57,7 @@ public class DocumentService {
     }
 
     public List<Document> searchSimilarDocuments(String query, int topK) {
-        return vectorStore.similaritySearch(query, topK);
+        return vectorStore.similaritySearch(SearchRequest.query(query).withTopK(topK));
     }
 
     public void loadSampleKnowledgeBase() {

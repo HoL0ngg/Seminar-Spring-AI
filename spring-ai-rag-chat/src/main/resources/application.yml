@@ -3,10 +3,11 @@ spring:
     name: spring-ai-rag-chat
   ai:
     openai:
-      api-key: ${OPENAI_API_KEY:your-api-key-here}
+      api-key: ${OPENAI_API_KEY:xxx}
       chat:
+        base-url: https://openrouter.ai/api
         options:
-          model: gpt-4
+          model: ${OPENAI_CHAT_MODEL:openrouter/free}
           temperature: 0.3
       embedding:
         options:

@@ -45,13 +45,6 @@
             <version>${spring-ai.version}</version>
         </dependency>
         
-        <!-- Vector Store -->
-        <dependency>
-            <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-simple-vector-store</artifactId>
-            <version>${spring-ai.version}</version>
-        </dependency>
-        
         <!-- Document Readers -->
         <dependency>
             <groupId>org.springframework.ai</groupId>

@@ -25,7 +25,7 @@ A conversational AI chatbot powered by Spring AI with RAG (Retrieval-Augmented G
 
 - Java 17 or higher
 - Maven 3.6+
-- OpenAI API key
+- OpenRouter API key (chat defaults to the free model router)
 
 ## Quick Start
 
@@ -34,10 +34,18 @@ A conversational AI chatbot powered by Spring AI with RAG (Retrieval-Augmented G
    cd spring-ai-rag-chat
    ```
 
-2. **Set OpenAI API key**
+2. **Set your OpenRouter API key** (the application keeps the `OPENAI_API_KEY` variable name for Spring AI compatibility)
    ```bash
    export OPENAI_API_KEY=your-actual-api-key-here
    ```
+
+   In PowerShell:
+   ```powershell
+   $env:OPENAI_API_KEY = "your-openrouter-api-key"
+   ```
+
+   Chat uses `https://openrouter.ai/api/v1/chat/completions` with `openrouter/free`.
+   Set `OPENAI_CHAT_MODEL` to override the model; paid models require OpenRouter credits.
 
 3. **Run the application**
    ```bash
@@ -146,8 +154,9 @@ spring:
   ai:
     openai:
       chat:
+        base-url: https://openrouter.ai/api
         options:
-          model: gpt-4
+          model: ${OPENAI_CHAT_MODEL:openrouter/free}
           temperature: 0.3  # Lower for more consistent responses
       embedding:
         options:
