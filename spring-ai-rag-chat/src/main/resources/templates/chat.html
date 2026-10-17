@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TechCorp AI Chat</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .chat-container {
+            height: calc(100vh - 56px);
+            display: flex;
+        }
+        .sidebar {
+            width: 300px;
+            background-color: #f8f9fa;
+            border-right: 1px solid #dee2e6;
+            overflow-y: auto;
+        }
+        .chat-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        .messages-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background-color: #ffffff;
+        }
+        .message {
+            margin-bottom: 20px;
+            max-width: 80%;
+        }
+        .message.user {
+            margin-left: auto;
+        }
+        .message.assistant {
+            margin-right: auto;
+        }
+        .message-content {
+            padding: 12px 16px;
+            border-radius: 18px;
+            word-wrap: break-word;
+        }
+        .message.user .message-content {
+            background-color: #007bff;
+            color: white;
+        }
+        .message.assistant .message-content {
+            background-color: #f1f3f4;
+            color: #333;
+        }
+        .message-input {
+            padding: 20px;
+            border-top: 1px solid #dee2e6;
+            background-color: white;
+        }
+        .session-item {
+            cursor: pointer;
+            padding: 12px 16px;
+            border-bottom: 1px solid #dee2e6;
+            transition: background-color 0.2s;
+        }
+        .session-item:hover {
+            background-color: #e9ecef;
+        }
+        .session-item.active {
+            background-color: #007bff;
+            color: white;
+        }
+        .sources {
+            font-size: 0.8em;
+            color: #6c757d;
+            margin-top: 8px;
+        }
+        .source-tag {
+            background-color: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-right: 4px;
+            display: inline-block;
+            margin-bottom: 2px;
+        }
+        .typing-indicator {
+            display: none;
+            padding: 12px 16px;
+            background-color: #f1f3f4;
+            border-radius: 18px;
+            margin-bottom: 20px;
+            max-width: 80px;
+        }
+        .typing-dots {
+            display: flex;
+            gap: 4px;
+        }
+        .typing-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #999;
+            animation: typing 1.4s infinite ease-in-out;
+        }
+        .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+        .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes typing {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-robot me-2"></i>TechCorp AI Assistant
+            </a>
+            <button class="btn btn-outline-light" onclick="loadKnowledgeBase()">
+                <i class="fas fa-database me-1"></i>Load Knowledge Base
+            </button>
+        </div>
+    </nav>
+
+    <div class="chat-container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="p-3">
+                <button class="btn btn-primary w-100 mb-3" onclick="createNewSession()">
+                    <i class="fas fa-plus me-2"></i>New Chat
+                </button>
+                <h6 class="text-muted">Chat History</h6>
+            </div>
+            <div id="sessionsList">
+                <!-- Sessions will be loaded here -->
+            </div>
+        </div>
+
+        <!-- Chat Area -->
+        <div class="chat-area">
+            <div class="messages-container" id="messagesContainer">
+                <div class="text-center text-muted mt-5">
+                    <i class="fas fa-comments fa-3x mb-3"></i>
+                    <h5>Welcome to TechCorp AI Assistant</h5>
+                    <p>Start a new conversation or select an existing chat from the sidebar.</p>
+                </div>
+            </div>
+
+            <div class="message-input">
+                <div class="input-group">
+                    <input type="text" class="form-control" id="messageInput" 
+                           placeholder="Type your message..." disabled>
+                    <button class="btn btn-primary" id="sendButton" onclick="sendMessage()" disabled>
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
+    <script>
+        let stompClient = null;
+        let currentSessionId = null;
+
+        // Initialize WebSocket connection
+        function connect() {
+            const socket = new SockJS('/ws');
+            stompClient = Stomp.over(socket);
+            stompClient.connect({}, function (frame) {
+                console.log('Connected: ' + frame);
+                stompClient.subscribe('/topic/public', function (message) {
+                    const chatMessage = JSON.parse(message.body);
+                    if (chatMessage.sessionId === currentSessionId) {
+                        displayMessage(chatMessage);
+                        hideTypingIndicator();
+                    }
+                });
+            });
+        }
+
+        // Load sessions
+        function loadSessions() {
+            fetch('/api/chat/sessions')
+                .then(response => response.json())
+                .then(sessions => {
+                    const sessionsList = document.getElementById('sessionsList');
+                    sessionsList.innerHTML = '';
+                    sessions.forEach(session => {
+                        const sessionElement = document.createElement('div');
+                        sessionElement.className = 'session-item';
+                        sessionElement.innerHTML = `
+                            <div class="fw-bold">${session.title}</div>
+                            <small class="text-muted">${new Date(session.updatedAt).toLocaleDateString()}</small>
+                        `;
+                        sessionElement.onclick = () => selectSession(session.sessionId);
+                        sessionsList.appendChild(sessionElement);
+                    });
+                });
+        }
+
+        // Create new session
+        function createNewSession() {
+            fetch('/api/chat/sessions', { method: 'POST' })
+                .then(response => response.json())
+                .then(session => {
+                    currentSessionId = session.sessionId;
+                    loadSessions();
+                    clearMessages();
+                    enableInput();
+                    selectSessionInSidebar(session.sessionId);
+                });
+        }
+
+        // Select session
+        function selectSession(sessionId) {
+            currentSessionId = sessionId;
+            selectSessionInSidebar(sessionId);
+            loadSessionMessages(sessionId);
+            enableInput();
+        }
+
+        // Select session in sidebar
+        function selectSessionInSidebar(sessionId) {
+            document.querySelectorAll('.session-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            document.querySelectorAll('.session-item').forEach(item => {
+                if (item.onclick.toString().includes(sessionId)) {
+                    item.classList.add('active');
+                }
+            });
+        }
+
+        // Load session messages
+        function loadSessionMessages(sessionId) {
+            fetch(`/api/chat/sessions/${sessionId}/messages`)
+                .then(response => response.json())
+                .then(messages => {
+                    clearMessages();
+                    messages.forEach(message => {
+                        displayStoredMessage(message);
+                    });
+                });
+        }
+
+        // Send message
+        function sendMessage() {
+            const messageInput = document.getElementById('messageInput');
+            const message = messageInput.value.trim();
+            
+            if (message && currentSessionId && stompClient) {
+                // Display user message immediately
+                displayMessage({
+                    content: message,
+                    type: 'USER',
+                    sessionId: currentSessionId
+                });
+                
+                // Show typing indicator
+                showTypingIndicator();
+                
+                // Send message via WebSocket
+                stompClient.send("/app/chat.sendMessage", {}, JSON.stringify({
+                    sessionId: currentSessionId,
+                    content: message,
+                    type: 'USER'
+                }));
+                
+                messageInput.value = '';
+            }
+        }
+
+        // Display message
+        function displayMessage(message) {
+            const messagesContainer = document.getElementById('messagesContainer');
+            const messageElement = document.createElement('div');
+            messageElement.className = `message ${message.type.toLowerCase()}`;
+            
+            let sourcesHtml = '';
+            if (message.sources && message.sources.length > 0) {
+                sourcesHtml = `
+                    <div class="sources">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Sources: ${message.sources.map(source => 
+                            `<span class="source-tag">${source}</span>`
+                        ).join('')}
+                        (${message.documentsUsed} documents used)
+                    </div>
+                `;
+            }
+            
+            messageElement.innerHTML = `
+                <div class="message-content">
+                    ${message.content}
+                    ${sourcesHtml}
+                </div>
+            `;
+            
+            messagesContainer.appendChild(messageElement);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        // Display stored message
+        function displayStoredMessage(message) {
+            const messagesContainer = document.getElementById('messagesContainer');
+            const messageElement = document.createElement('div');
+            messageElement.className = `message ${message.type.toLowerCase()}`;
+            
+            let sourcesHtml = '';
+            if (message.sources && message.sources.length > 0) {
+                sourcesHtml = `
+                    <div class="sources">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Sources: ${message.sources.map(source => 
+                            `<span class="source-tag">${source}</span>`
+                        ).join('')}
+                        (${message.documentsUsed} documents used)
+                    </div>
+                `;
+            }
+            
+            messageElement.innerHTML = `
+                <div class="message-content">
+                    ${message.content}
+                    ${sourcesHtml}
+                </div>
+            `;
+            
+            messagesContainer.appendChild(messageElement);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        // Show typing indicator
+        function showTypingIndicator() {
+            const messagesContainer = document.getElementById('messagesContainer');
+            const typingElement = document.createElement('div');
+            typingElement.className = 'typing-indicator';
+            typingElement.id = 'typingIndicator';
+            typingElement.innerHTML = `
+                <div class="typing-dots">
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                </div>
+            `;
+            typingElement.style.display = 'block';
+            messagesContainer.appendChild(typingElement);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        // Hide typing indicator
+        function hideTypingIndicator() {
+            const typingIndicator = document.getElementById('typingIndicator');
+            if (typingIndicator) {
+                typingIndicator.remove();
+            }
+        }
+
+        // Clear messages
+        function clearMessages() {
+            const messagesContainer = document.getElementById('messagesContainer');
+            messagesContainer.innerHTML = `
+                <div class="text-center text-muted mt-5">
+                    <i class="fas fa-comments fa-3x mb-3"></i>
+                    <h5>Start your conversation</h5>
+                    <p>Ask me anything about TechCorp products, policies, or support!</p>
+                </div>
+            `;
+        }
+
+        // Enable input
+        function enableInput() {
+            document.getElementById('messageInput').disabled = false;
+            document.getElementById('sendButton').disabled = false;
+        }
+
+        // Load knowledge base
+        function loadKnowledgeBase() {
+            fetch('/api/documents/load-knowledge-base', { method: 'POST' })
+                .then(response => response.text())
+                .then(message => {
+                    alert('Knowledge base loaded successfully!');
+                })
+                .catch(error => {
+                    alert('Error loading knowledge base: ' + error);
+                });
+        }
+
+        // Enter key handler
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('messageInput').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    sendMessage();
+                }
+            });
+            
+            // Initialize
+            connect();
+            loadSessions();
+        });
+    </script>
+</body>
+</html>
