@@ -11,13 +11,17 @@ import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 @Service
 public class DocumentService {
 
     private final VectorStore vectorStore;
     private final TokenTextSplitter textSplitter;
+    private final List<Document> indexedDocuments = new CopyOnWriteArrayList<>();
 
     public DocumentService(VectorStore vectorStore) {
         this.vectorStore = vectorStore;
@@ -37,7 +41,7 @@ public class DocumentService {
         List<Document> documents = pdfReader.get();
         
         List<Document> splitDocuments = textSplitter.apply(documents);
-        vectorStore.add(splitDocuments);
+        addDocuments(splitDocuments);
     }
 
     public void ingestDocument(Resource resource) {
@@ -45,7 +49,7 @@ public class DocumentService {
         List<Document> documents = tikaReader.get();
         
         List<Document> splitDocuments = textSplitter.apply(documents);
-        vectorStore.add(splitDocuments);
+        addDocuments(splitDocuments);
     }
 
     public void ingestTextContent(String content, String source) {
@@ -53,11 +57,20 @@ public class DocumentService {
         document.getMetadata().put("source", source);
         
         List<Document> splitDocuments = textSplitter.apply(List.of(document));
-        vectorStore.add(splitDocuments);
+        addDocuments(splitDocuments);
     }
 
     public List<Document> searchSimilarDocuments(String query, int topK) {
         return vectorStore.similaritySearch(SearchRequest.query(query).withTopK(topK));
+    }
+
+    public List<Document> getIndexedDocuments() {
+        return Collections.unmodifiableList(new ArrayList<>(indexedDocuments));
+    }
+
+    private void addDocuments(List<Document> documents) {
+        vectorStore.add(documents);
+        indexedDocuments.addAll(documents);
     }
 
     public void loadSampleKnowledgeBase() {

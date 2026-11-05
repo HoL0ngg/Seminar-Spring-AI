@@ -1,7 +1,8 @@
 package com.example.controller;
 
 import com.example.service.DocumentService;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -17,7 +18,7 @@ public class DocumentController {
 
     private final DocumentService documentService;
 
-    @Autowired
+    // @Autowired
     public DocumentController(DocumentService documentService) {
         this.documentService = documentService;
     }
@@ -27,18 +28,18 @@ public class DocumentController {
         try {
             Path tempFile = Files.createTempFile("upload-", file.getOriginalFilename());
             Files.copy(file.getInputStream(), tempFile, StandardCopyOption.REPLACE_EXISTING);
-            
-            org.springframework.core.io.Resource resource = 
-                new org.springframework.core.io.FileSystemResource(tempFile.toFile());
-            
+
+            Resource resource = new FileSystemResource(
+                    tempFile.toFile());
+
             if (file.getOriginalFilename().toLowerCase().endsWith(".pdf")) {
                 documentService.ingestPdfDocument(resource);
             } else {
                 documentService.ingestDocument(resource);
             }
-            
+
             Files.deleteIfExists(tempFile);
-            
+
             return ResponseEntity.ok("Document uploaded and processed successfully: " + file.getOriginalFilename());
         } catch (IOException e) {
             return ResponseEntity.badRequest().body("Failed to upload document: " + e.getMessage());
@@ -57,5 +58,6 @@ public class DocumentController {
         return ResponseEntity.ok("Knowledge base loaded successfully");
     }
 
-    public record TextIngestRequest(String content, String source) {}
+    public record TextIngestRequest(String content, String source) {
+    }
 }
