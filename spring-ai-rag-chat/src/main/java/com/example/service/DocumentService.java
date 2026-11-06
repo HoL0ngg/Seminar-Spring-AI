@@ -29,6 +29,10 @@ public class DocumentService {
     }
 
     public void ingestPdfDocument(Resource pdfResource) {
+        ingestPdfDocument(pdfResource, pdfResource.getFilename());
+    }
+
+    public void ingestPdfDocument(Resource pdfResource, String source) {
         PdfDocumentReaderConfig config = PdfDocumentReaderConfig.builder()
                 .withPageExtractedTextFormatter(ExtractedTextFormatter.builder()
                         .withNumberOfBottomTextLinesToDelete(0)
@@ -39,6 +43,12 @@ public class DocumentService {
 
         PagePdfDocumentReader pdfReader = new PagePdfDocumentReader(pdfResource, config);
         List<Document> documents = pdfReader.get();
+        String documentSource = source == null || source.isBlank()
+                ? pdfResource.getFilename()
+                : source;
+        if (documentSource != null && !documentSource.isBlank()) {
+            documents.forEach(document -> document.getMetadata().put("source", documentSource));
+        }
 
         List<Document> splitDocuments = textSplitter.apply(documents);
         addDocuments(splitDocuments);

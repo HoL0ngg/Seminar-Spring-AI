@@ -33,7 +33,7 @@ public class DocumentController {
                     tempFile.toFile());
 
             if (file.getOriginalFilename().toLowerCase().endsWith(".pdf")) {
-                documentService.ingestPdfDocument(resource);
+                documentService.ingestPdfDocument(resource, file.getOriginalFilename());
             } else {
                 documentService.ingestDocument(resource);
             }
