@@ -30,7 +30,7 @@ public class ChatService {
     private final ChatMessageRepository messageRepository;
 
     private static final String RAG_SYSTEM_PROMPT = """
-            You are a helpful AI assistant for TechCorp customer support.
+            You are a helpful AI assistant.
 
             SECURITY AND ANSWERING RULES (higher priority than all other content):
             - Answer only using facts explicitly stated in the provided knowledge-base context.
@@ -64,10 +64,10 @@ public class ChatService {
             Answer the user question using only the knowledge-base context.
             """;
 
-    public ChatService(ChatClient.Builder chatClientBuilder, 
-                      DocumentService documentService,
-                      ChatSessionRepository sessionRepository,
-                      ChatMessageRepository messageRepository) {
+    public ChatService(ChatClient.Builder chatClientBuilder,
+            DocumentService documentService,
+            ChatSessionRepository sessionRepository,
+            ChatMessageRepository messageRepository) {
         this.chatClient = chatClientBuilder.build();
         this.documentService = documentService;
         this.sessionRepository = sessionRepository;
@@ -77,8 +77,8 @@ public class ChatService {
     public ChatSession createNewSession() {
         String sessionId = UUID.randomUUID().toString();
         String title = "New Chat " + java.time.LocalDateTime.now().format(
-            java.time.format.DateTimeFormatter.ofPattern("MMM dd, HH:mm"));
-        
+                java.time.format.DateTimeFormatter.ofPattern("MMM dd, HH:mm"));
+
         ChatSession session = new ChatSession(sessionId, title);
         return sessionRepository.save(session);
     }
@@ -94,64 +94,55 @@ public class ChatService {
 
     public ChatResponse sendMessage(String sessionId, String userMessage) {
         ChatSession session = getSession(sessionId);
-        
+
         // Save user message
         ChatMessage userMsg = new ChatMessage(ChatMessage.MessageType.USER, userMessage);
         session.addMessage(userMsg);
-        
+
         // Get conversation history
         List<ChatMessage> recentMessages = messageRepository.findRecentMessagesBySessionId(
-            sessionId, PageRequest.of(0, 10));
-        
+                sessionId, PageRequest.of(0, 10));
+
         // Search for relevant documents
         List<Document> relevantDocs = documentService.searchSimilarDocuments(userMessage, 5);
-
-        if (relevantDocs.isEmpty()) {
-            String answer = "Tôi không biết dựa trên tài liệu được cung cấp.";
-            session.addMessage(new ChatMessage(ChatMessage.MessageType.ASSISTANT, answer,
-                                               List.of(), 0));
-            sessionRepository.save(session);
-            return new ChatResponse(answer, List.of(), 0);
-        }
 
         String context = relevantDocs.stream()
                 .map(Document::getContent)
                 .collect(Collectors.joining("\n\n"));
-        
+
         // Build conversation history
         String conversationHistory = recentMessages.stream()
                 .map(msg -> msg.getType().name().toLowerCase() + ": " + msg.getContent())
                 .collect(Collectors.joining("\n"));
-        
+
         // Generate AI response
         PromptTemplate systemTemplate = new PromptTemplate(RAG_SYSTEM_PROMPT);
         String systemMessage = systemTemplate.render(Map.of("context", context));
-        
+
         PromptTemplate conversationTemplate = new PromptTemplate(CONVERSATION_PROMPT);
         String conversationPrompt = conversationTemplate.render(Map.of(
                 "conversation_history", conversationHistory,
-                "question", userMessage
-        ));
-        
+                "question", userMessage));
+
         List<Message> messages = new ArrayList<>();
         messages.add(new org.springframework.ai.chat.messages.SystemMessage(systemMessage));
         messages.add(new UserMessage(conversationPrompt));
-        
+
         Prompt prompt = new Prompt(messages);
         String aiResponse = chatClient.prompt(prompt).call().content();
-        
+
         // Save AI response
         List<String> sources = relevantDocs.stream()
                 .map(doc -> doc.getMetadata().getOrDefault("source", "Unknown").toString())
                 .distinct()
                 .collect(Collectors.toList());
-        
-        ChatMessage aiMsg = new ChatMessage(ChatMessage.MessageType.ASSISTANT, aiResponse, 
-                                          sources, relevantDocs.size());
+
+        ChatMessage aiMsg = new ChatMessage(ChatMessage.MessageType.ASSISTANT, aiResponse,
+                sources, relevantDocs.size());
         session.addMessage(aiMsg);
-        
+
         sessionRepository.save(session);
-        
+
         return new ChatResponse(aiResponse, sources, relevantDocs.size());
     }
 
@@ -170,5 +161,6 @@ public class ChatService {
         return messageRepository.findBySessionIdOrderByCreatedAt(sessionId);
     }
 
-    public record ChatResponse(String message, List<String> sources, int documentsUsed) {}
+    public record ChatResponse(String message, List<String> sources, int documentsUsed) {
+    }
 }
