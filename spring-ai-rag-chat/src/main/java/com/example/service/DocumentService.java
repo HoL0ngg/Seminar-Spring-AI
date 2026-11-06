@@ -61,7 +61,7 @@ public class DocumentService {
     }
 
     public List<Document> searchSimilarDocuments(String query, int topK) {
-        return vectorStore.similaritySearch(SearchRequest.query(query).withTopK(topK));
+        return vectorStore.similaritySearch(SearchRequest.query(query).withTopK(topK).withSimilarityThreshold(0.75));
     }
 
     public List<Document> getIndexedDocuments() {
